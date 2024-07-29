@@ -24,9 +24,9 @@ function! ui#JutgeShowProblems()
   let s:mode = 0
   let s:courses = ui#fetch_problems()
 
-  let disp_text = ui#make_course_text()
   call s:create_window()
   call s:add_mappings()
+  let disp_text = ui#make_course_text()
   call s:set_init_text(disp_text) 
 endfunction
 
@@ -241,7 +241,7 @@ highlight RedText ctermfg=Red guifg=Red
 highlight YellowText ctermfg=Yellow guifg=Yellow
   
 highlight TitleText ctermfg=Blue guifg=Blue ctermbg=NONE guibg=NONE
-highlight CourseText ctermfg=Brown guifg=Brown ctermbg=NONE guibg=NONE
+highlight CourseText ctermfg=DarkGreen guifg=DarkGreen ctermbg=NONE guibg=NONE
 function! s:create_window()
   vertical botrigh 60new                            " create a new window on the right that's 60 columns wide
 
@@ -260,7 +260,6 @@ function! s:highlightTitleChecks()
   call matchadd('YellowText', s:PARTIAL_EXERCISE_CHECK)
 
   call matchaddpos('TitleText',[1])
- 
 endfunction
 
 function! s:set_init_text(disp_text)
