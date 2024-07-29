@@ -1,20 +1,33 @@
 let s:system = function(get(g:, 'webapi#system_function', 'system'))
+let g:version = "0.1"
 
 let s:plugindir = expand('<sfile>:p:h:h')
 let s:cookie_file = s:plugindir."/cookies.txt"
-let s:mode = 0  " 0 -> Listing courses
-                " 1 -> Showing exercise
+let s:mode = 0
+" 0 -> Listing courses
+" 1 -> Showing exercise
+
+let s:CORRECT_EXERCISE_CHECK = "✔️"
+let s:INCORRECT_EXERCISE_CHECK = "✗"
+let s:PARTIAL_EXERCISE_CHECK = "⚖️"
 
 function! ui#JutgeShowProblems()
+  let winid = bufwinid('Jutge Problems')
+  
+  if(winid != -1)
+    echo "JutgePlug is already running"
+    return
+  endif
+
+  let s:already_on = 1
+
+  let s:mode = 0
   let s:courses = ui#fetch_problems()
 
   let disp_text = ui#make_course_text()
   call s:create_window()
   call s:add_mappings()
   call s:set_init_text(disp_text) 
-
-  "let json_string = webapi#json#encode(obj)
-  "call writefile(split(json_string,"\n",1), s:plugindir.'/obj.txt','b')
 endfunction
 
 function! ui#fetch_html_with_cookie(url)
@@ -40,14 +53,22 @@ function! ui#fetch_problems()
   return courses
 endfunction
 
+let s:match_ids = []
+let s:course_lines = [] " Lines where the title of a course is
+
 function! ui#make_course_text() 
-  let disp_text = "Enrolled courses:\n\n"
-  
+  let disp_text = "JUTGE VIM PLUGIN v".g:version."\n\nEnrolled courses:\n\n"
+  let s:course_lines = map(range(len(s:courses)), 0)
   let index = 0
   let courses_len = len(s:courses)
+  let current_line = 5
+  let courses_added = 0
   while(index < courses_len)
     let course = s:courses[index]
     let disp_text = disp_text."\t * ".course["name"]."\n"
+    let s:course_lines[courses_added] = current_line
+    let courses_added = courses_added + 1
+    let current_line = current_line + 1
 
     if(course["lessons_visible"])
       let lessons_len = len(course["lessons"])
@@ -55,7 +76,8 @@ function! ui#make_course_text()
       while(lindex < lessons_len)
         let lesson = course["lessons"][lindex]
         let disp_text = disp_text."\t\t\t > ".lesson["name"]."\n"
-        
+        let current_line = current_line + 1
+
         if(lesson["exercices_visible"])
           let exercices_len = len(lesson["exercices"])
           let eindex = 0
@@ -63,6 +85,7 @@ function! ui#make_course_text()
             let exercice = lesson["exercices"][eindex]
 
             let disp_text = disp_text."\t\t\t\t\t ".exercice["status"]." ".exercice["name"]."\n"
+            let current_line = current_line + 1
             let eindex += 1
           endwhile
         endif
@@ -72,9 +95,26 @@ function! ui#make_course_text()
     endif
 
     let disp_text = disp_text."\n"
+    let current_line = current_line + 1
     let index += 1
   endwhile
+
+  call ClearHighlights()
+
+  for line in s:course_lines
+    call add(s:match_ids, matchaddpos('CourseText', [[line]]))
+  endfor
+
+  call s:highlightTitleChecks()
+  
   return disp_text
+endfunction
+
+function! ClearHighlights()
+  for id in s:match_ids
+    call matchdelete(id)
+  endfor
+  let s:match_ids = []
 endfunction
 
 function! ui#get_course(content)
@@ -129,11 +169,11 @@ function! ui#get_course(content)
         let status_box_style = status_box["attr"]["style"]
 
         if(stridx(status_box_style,"green") != -1)
-          let exercice_status = "✔️"
+          let exercice_status = s:CORRECT_EXERCISE_CHECK
         elseif (stridx(status_box_style,"red") != -1)
-          let exercice_status = "✗" 
+          let exercice_status = s:INCORRECT_EXERCISE_CHECK
         else
-          let exercice_status = "⚖️"
+          let exercice_status = s:PARTIAL_EXERCISE_CHECK
         endif
       endif
       let exercice_id = exercice_content[3]["child"][0]
@@ -156,37 +196,80 @@ function! ui#get_course(content)
 
   let lesson["exercices"] = exercices
   let course["lessons"][lesson_index] = lesson
- 
+
   return course
 endfunction
 
 function! ui#replace_accents(text)
-  let text = substitute(a:text,"&aacute;","á","g")
-  let text = substitute(text,"&eacute;","é","g")
-  let text = substitute(text,"&iacute;","í","g")
-  let text = substitute(text,"&oacute;","ó","g")
-  let text = substitute(text,"&uacute;","ú","g")
-  let text = substitute(text,"&agrave;","à","g")
-  let text = substitute(text,"&egrave;","è","g")
-  let text = substitute(text,"&ograve;","ò","g")
-  return text
+  " These are some of the HTML special characters
+  " Only parsing the Catalan and Spanish Language ones at the moment
+
+  let l:substitutions = [
+        \ ['&aacute;', 'á'],
+        \ ['&eacute;', 'é'],
+        \ ['&iacute;', 'í'],
+        \ ['&oacute;', 'ó'],
+        \ ['&uacute;', 'ú'],
+        \ ['&agrave;', 'à'],
+        \ ['&egrave;', 'è'],
+        \ ['&ograve;', 'ò'],
+        \ ['&iuml;', 'ï'],
+        \ ['&uuml;', 'ü'],
+        \ ['&ccedil;', 'ç'],
+        \ ['&Aacute;', 'Á'],
+        \ ['&Eacute;', 'É'],
+        \ ['&Iacute;', 'Í'],
+        \ ['&Oacute;', 'Ó'],
+        \ ['&Uacute;', 'Ú'],
+        \ ['&Agrave;', 'À'],
+        \ ['&Egrave;', 'È'],
+        \ ['&Ograve;', 'Ò'],
+        \ ['&Iuml;', 'Ï'],
+        \ ['&Uuml;', 'Ü'],
+        \ ['&Ccedil;', 'Ç']
+        \ ]
+
+  let l:text = a:text
+  for l:pair in l:substitutions
+    let l:text = substitute(l:text, l:pair[0], l:pair[1], 'g')
+  endfor
+  return l:text
 endfunction
 
+highlight GreenText ctermfg=Green guifg=Green
+highlight RedText ctermfg=Red guifg=Red
+highlight YellowText ctermfg=Yellow guifg=Yellow
+  
+highlight TitleText ctermfg=Blue guifg=Blue ctermbg=NONE guibg=NONE
+highlight CourseText ctermfg=Brown guifg=Brown ctermbg=NONE guibg=NONE
 function! s:create_window()
-  vertical botrigh 60new                            " create a new window on the right that's 80 columns wide
+  vertical botrigh 60new                            " create a new window on the right that's 60 columns wide
+
   setlocal nomodifiable                             " stop the user from editing the buffer
   setlocal buftype=nofile bufhidden=wipe noswapfile " tell Vim this is a temporary buffer not backed by a file
   setlocal nonumber cursorline wrap nospell         " no line numbers, wrapping, highlight the current line
+
+  call s:highlightTitleChecks()
+
   file Jutge Problems                                     " set the file name of the buffer
+endfunction
+
+function! s:highlightTitleChecks()
+  call matchadd('GreenText', s:CORRECT_EXERCISE_CHECK)
+  call matchadd('RedText', s:INCORRECT_EXERCISE_CHECK)
+  call matchadd('YellowText', s:PARTIAL_EXERCISE_CHECK)
+
+  call matchaddpos('TitleText',[1])
+ 
 endfunction
 
 function! s:set_init_text(disp_text)
   setlocal modifiable
-  
+
   let lines = split(a:disp_text, '\n')
 
   call append(0, lines)
-
+  
   setlocal nomodifiable
 endfunction
 
@@ -201,7 +284,7 @@ function! s:handle_enter_list_courses()
   let column_enter = col('.')
 
   silent! normal! gg"_dG
-  
+
   let res = s:update_courses_vis(line_enter)
   if(res == -1)
     let disp_text = ui#make_course_text()
@@ -213,7 +296,7 @@ function! s:handle_enter_list_courses()
   else
     call ui#show_problem(res)
   endif
-  
+
   setlocal nomodifiable
 
 endfunction
@@ -227,7 +310,7 @@ function! s:handle_enter()
 endfunction
 
 function! s:update_courses_vis(line)
-  let c_line = 3
+  let c_line = 5
   if(a:line < c_line)
     return -1
   endif
@@ -240,7 +323,7 @@ function! s:update_courses_vis(line)
   while(c_line < a:line)
     let course = s:courses[course_index]
     let course_vis_lines = ui#get_course_vis_lines(course)
-    
+
     if(a:line > c_line + course_vis_lines)
       let c_line += course_vis_lines + 1
       let course_index += 1
@@ -254,7 +337,7 @@ function! s:update_courses_vis(line)
       endif
       let lesson = course["lessons"][lesson_index+1] 
       let lesson_vis_lines = ui#get_lesson_vis_lines(lesson)
-      
+
       if(c_line + lesson_vis_lines < a:line)
         let c_line += lesson_vis_lines
         let lesson_index += 1
@@ -268,14 +351,12 @@ function! s:update_courses_vis(line)
           break
         endif
         let lesson_index += 1
-        
+
         let exercice_index += a:line - c_line -1
         break
       endif
     endif
   endwhile
-
-  " echo course_index . ", " . lesson_index . ", " . exercice_index
 
   if(lesson_index == -1)
     let s:courses[course_index]["lessons_visible"] = !s:courses[course_index]["lessons_visible"]
@@ -306,7 +387,7 @@ function! ui#get_course_vis_lines(course)
 
     let lindex+=1
   endwhile
-  
+
   return 1 + lessons_line_sum
 endfunction
 
@@ -325,7 +406,7 @@ function! ui#show_problem(id)
   let id = a:id
 
   echo "Fetching problem: ".id
-  
+
   let res = ui#fetch_html_with_cookie("https://jutge.org/problems/".id."/")
 endfunction
 
