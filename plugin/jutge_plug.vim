@@ -1,7 +1,7 @@
-" Title:        Example Plugin
-" Description:  A plugin to provide an example for creating Vim plugins.
-" Last Change:  8 November 2021
-" Maintainer:   Example User <https://github.com/example-user>
+" Title:        Jutge Plugin
+" Description:  A plugin to interface with jutge.org within vim.
+" Last Change:  31 July 2024
+" Maintainer:   Gerard Jensen <https://github.com/gerardjensen>
 
 " Prevents the plugin from being loaded multiple times. If the loaded
 " variable exists, do nothing more. Otherwise, assign the loaded

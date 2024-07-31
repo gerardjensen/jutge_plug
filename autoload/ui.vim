@@ -1,113 +1,121 @@
-let s:system = function(get(g:, 'webapi#system_function', 'system'))
-let g:version = "0.1"
-
-let s:plugindir = expand('<sfile>:p:h:h')
-let s:cookie_file = s:plugindir."/cookies.txt"
 let s:mode = 0
 " 0 -> Listing courses
 " 1 -> Showing exercise
 
-let s:CORRECT_EXERCISE_CHECK = "✔️"
-let s:INCORRECT_EXERCISE_CHECK = "✗"
-let s:PARTIAL_EXERCISE_CHECK = "⚖️"
-
-function! ui#JutgeShowProblems()
-  let winid = bufwinid('Jutge Problems')
-  
-  if(winid != -1)
-    echo "JutgePlug is already running"
-    return
-  endif
-
-  let s:already_on = 1
-
-  let s:mode = 0
-  let s:courses = ui#fetch_problems()
-
-  call s:create_window()
-  call s:add_mappings()
-  let disp_text = ui#make_course_text()
-  call s:set_init_text(disp_text) 
-endfunction
-
-function! ui#fetch_html_with_cookie(url)
-  let command = "curl -s ".a:url." -b ".s:cookie_file 
-  let res = s:system(command)
-  return webapi#html#parse(res) 
-endfunction
-
-function! ui#fetch_problems()
-  let obj = ui#fetch_html_with_cookie("https://jutge.org/problems")
-  let body = obj["child"][1]["child"][17]
-  let raw_content = body["child"][3]["child"][1]["child"][9]["child"]
-  let courses_len = (len(raw_content)-1)/2
-  let courses = map(range(courses_len), 0)
-  let raw_index = 1
-  let index = 0
-  while(index < courses_len)
-    let content = raw_content[raw_index] 
-    let courses[index] = ui#get_course(content)
-    let index+=1
-    let raw_index+=2
-  endwhile
-  return courses
-endfunction
+let g:VERSION = "0.1"
+let g:CORRECT_EXERCISE_CHECK = "✔️"
+let g:INCORRECT_EXERCISE_CHECK = "✗"
+let g:PARTIAL_EXERCISE_CHECK = "⚖️"
 
 let s:match_ids = []
 let s:course_lines = [] " Lines where the title of a course is
 
+highlight GreenText ctermfg=Green guifg=Green
+highlight RedText ctermfg=Red guifg=Red
+highlight YellowText ctermfg=Yellow guifg=Yellow
+  
+highlight TitleText ctermfg=Blue guifg=Blue ctermbg=NONE guibg=NONE
+highlight CourseText ctermfg=DarkGreen guifg=DarkGreen ctermbg=NONE guibg=NONE
+
+function! ui#JutgeShowProblems()
+  if(bufwinid('Jutge Problems') != -1)
+    echo "JutgePlug is already running"
+    return
+  endif
+
+  let s:mode = 0
+  let s:courses = http#fetch_problems()
+
+  call s:create_window()
+  
+  nmap <silent> <buffer> q :bd<CR>
+  nmap <silent> <buffer> <Enter> :call <SID>handle_enter()<CR> 
+
+  nmap <silent> <buffer> d :call ui#get_exercise_files()<CR>
+  nmap <silent> <buffer> b :call ui#go_back_to_courses()<CR>
+   
+  setlocal modifiable
+  let l:disp_text = ui#make_course_text()
+  let l:lines = split(l:disp_text, '\n')
+  call append(0, l:lines)
+  setlocal nomodifiable
+endfunction
+
+function! s:create_window()
+  vertical botrigh 90new                            " create a new window on the right that's 60 columns wide
+
+  setlocal nomodifiable                             " stop the user from editing the buffer
+  setlocal buftype=nofile bufhidden=wipe noswapfile " tell Vim this is a temporary buffer not backed by a file
+  setlocal nonumber cursorline wrap nospell         " no line numbers, wrapping, highlight the current line
+
+  call s:highlight_statics()
+
+  file Jutge Problems                                     " set the file name of the buffer
+endfunction
+
+function! s:highlight_statics()
+  call matchadd('GreenText', g:CORRECT_EXERCISE_CHECK)
+  call matchadd('RedText', g:INCORRECT_EXERCISE_CHECK)
+  call matchadd('YellowText', g:PARTIAL_EXERCISE_CHECK)
+
+  call matchaddpos('TitleText',[1])
+endfunction
+
 function! ui#make_course_text() 
-  let disp_text = "JUTGE VIM PLUGIN v".g:version."\n\nEnrolled courses:\n\n"
+  let l:disp_text = "JUTGE VIM PLUGIN v".g:VERSION."\n\nEnrolled courses:\n\n"
   let s:course_lines = map(range(len(s:courses)), 0)
-  let index = 0
-  let courses_len = len(s:courses)
-  let current_line = 5
-  let courses_added = 0
-  while(index < courses_len)
-    let course = s:courses[index]
-    let disp_text = disp_text."\t * ".course["name"]."\n"
-    let s:course_lines[courses_added] = current_line
-    let courses_added = courses_added + 1
-    let current_line = current_line + 1
+  let l:index = 0
+  let l:courses_len = len(s:courses)
+  let l:current_line = 5 " 5 is the first line where a course title is placed
+  let l:courses_added = 0
+  while(l:index < l:courses_len)
+    let l:course = s:courses[l:index]
+    let l:disp_text = l:disp_text."\t * ".l:course["name"]."\n"
+    let s:course_lines[l:courses_added] = l:current_line
+    let l:courses_added = l:courses_added + 1
+    let l:current_line = l:current_line + 1
 
-    if(course["lessons_visible"])
-      let lessons_len = len(course["lessons"])
-      let lindex = 0
-      while(lindex < lessons_len)
-        let lesson = course["lessons"][lindex]
-        let disp_text = disp_text."\t\t\t > ".lesson["name"]."\n"
-        let current_line = current_line + 1
+    if(l:course["lessons_visible"])
+      let l:lessons_len = len(l:course["lessons"])
+      let l:lindex = 0
+      while(l:lindex < l:lessons_len)
+        let l:lesson = l:course["lessons"][l:lindex]
+        let l:disp_text = l:disp_text."\t\t\t > ".l:lesson["name"]."\n"
+        let l:current_line = l:current_line + 1
 
-        if(lesson["exercices_visible"])
-          let exercices_len = len(lesson["exercices"])
-          let eindex = 0
-          while(eindex<exercices_len)
-            let exercice = lesson["exercices"][eindex]
+        if(l:lesson["exercices_visible"])
+          let l:exercices_len = len(l:lesson["exercices"])
+          let l:eindex = 0
+          while(l:eindex < l:exercices_len)
+            let l:exercice = l:lesson["exercices"][l:eindex]
 
-            let disp_text = disp_text."\t\t\t\t\t ".exercice["status"]." ".exercice["name"]."\n"
-            let current_line = current_line + 1
-            let eindex += 1
+            let l:disp_text = l:disp_text."\t\t\t\t\t ".l:exercice["status"]." ".l:exercice["name"]."\n"
+            let l:current_line = l:current_line + 1
+            let l:eindex += 1
           endwhile
         endif
 
-        let lindex+=1
+        let l:lindex+=1
       endwhile
     endif
 
-    let disp_text = disp_text."\n"
-    let current_line = current_line + 1
-    let index += 1
+    let l:disp_text = l:disp_text."\n"
+    let l:current_line = l:current_line + 1
+    let l:index += 1
   endwhile
 
+  call s:reset_highlighting()  
+  return l:disp_text
+endfunction
+
+function! s:reset_highlighting()
   call s:clear_highlights()
 
   for line in s:course_lines
     call add(s:match_ids, matchaddpos('CourseText', [[line]]))
   endfor
 
-  call s:highlightTitleChecks()
-  
-  return disp_text
+  call s:highlight_statics()
 endfunction
 
 function! s:clear_highlights()
@@ -117,201 +125,26 @@ function! s:clear_highlights()
   let s:match_ids = []
 endfunction
 
-function! ui#get_course(content)
-  let course = {}
-  let course_name = a:content["child"][1]["child"][1]["child"][0]
-  let course_name = trim(course_name)
-  let course_name = ui#replace_accents(course_name)
-  let course["name"] = course_name
-  let course["lessons_visible"] = 0
-  let course["lessons"] = {}
-
-  let raw_lessons_exercices = a:content["child"][3]["child"]
-
-  let raw_lessons_exercices_len = len(raw_lessons_exercices)
-  let raw_index = 1
-  let lesson_index = -1
-  let exercice_index = 0
-  let lesson = {}
-  let exercices = {}
-  while(raw_index < raw_lessons_exercices_len)
-    let row_cnt = raw_lessons_exercices[raw_index]
-    let title_box = row_cnt["child"][1]["child"][1]
-
-    if(title_box["name"] == "b") " is lesson
-      if(lesson_index > -1)
-        let lesson["exercices"] = exercices
-        let course["lessons"][lesson_index] = lesson
-      endif
-      let lesson_index += 1
-
-      let lesson = {}
-      let lesson_name = title_box["child"][1]["child"][0]
-      let lesson_name = trim(lesson_name)
-      let lesson_name = ui#replace_accents(lesson_name)
-      let lesson["name"] = lesson_name
-
-      let lesson["exercices"] = {}
-      let lesson["exercices_visible"] = 0
-
-      let exercice_index = 0
-      let exercices = {}
-    elseif(title_box["name"] == "i") " is exercice
-      let exercice_content = row_cnt["child"][1]["child"]
-      let has_content = len(exercice_content) > 4
-      if(!has_content)
-        let raw_index += 2
-        continue
-      endif
-      let status_box = exercice_content[1]
-      let exercice_status = " "
-      if(has_key(status_box,"attr") && has_key(status_box["attr"],"style"))
-        let status_box_style = status_box["attr"]["style"]
-
-        if(stridx(status_box_style,"green") != -1)
-          let exercice_status = s:CORRECT_EXERCISE_CHECK
-        elseif (stridx(status_box_style,"red") != -1)
-          let exercice_status = s:INCORRECT_EXERCISE_CHECK
-        else
-          let exercice_status = s:PARTIAL_EXERCISE_CHECK
-        endif
-      endif
-      let exercice_id = exercice_content[3]["attr"]["href"]
-      let exercice_id = trim(exercice_id)
-      let exercice_id = s:get_last_element_url(exercice_id)
-      let exercice_name = exercice_content[4]
-      let exercice_name = substitute(exercice_name,"&nbsp;","","")
-      let exercice_name = trim(exercice_name)
-      let exercice_name = ui#replace_accents(exercice_name)
-
-      let exercice = {}
-      let exercice["name"] = exercice_name
-      let exercice["id"] = exercice_id
-      let exercice["status"] = exercice_status
-      let exercices[exercice_index] = exercice
-      let exercice_index += 1
-    endif
-
-    let raw_index += 2
-  endwhile
-
-  let lesson["exercices"] = exercices
-  let course["lessons"][lesson_index] = lesson
-
-  return course
-endfunction
-
-function! s:get_last_element_url(url)
-    " Remove the trailing slash if it exists
-    let l:url = substitute(a:url, '/\+$', '', '')
-
-    " Find the position of the last slash
-    let l:last_slash_pos = strridx(l:url, '/')
-
-    " Get the last element by slicing the string from the last slash
-    let l:last_element = strpart(l:url, l:last_slash_pos + 1)
-
-    return l:last_element
-endfunction
-
-function! ui#replace_accents(text)
-  " These are some of the HTML special characters
-  " Only parsing the Catalan and Spanish Language ones at the moment
-
-  let l:substitutions = [
-        \ ['&aacute;', 'á'],
-        \ ['&eacute;', 'é'],
-        \ ['&iacute;', 'í'],
-        \ ['&oacute;', 'ó'],
-        \ ['&uacute;', 'ú'],
-        \ ['&agrave;', 'à'],
-        \ ['&egrave;', 'è'],
-        \ ['&ograve;', 'ò'],
-        \ ['&iuml;', 'ï'],
-        \ ['&uuml;', 'ü'],
-        \ ['&ccedil;', 'ç'],
-        \ ['&Aacute;', 'Á'],
-        \ ['&Eacute;', 'É'],
-        \ ['&Iacute;', 'Í'],
-        \ ['&Oacute;', 'Ó'],
-        \ ['&Uacute;', 'Ú'],
-        \ ['&Agrave;', 'À'],
-        \ ['&Egrave;', 'È'],
-        \ ['&Ograve;', 'Ò'],
-        \ ['&Iuml;', 'Ï'],
-        \ ['&Uuml;', 'Ü'],
-        \ ['&Ccedil;', 'Ç']
-        \ ]
-
-  let l:text = a:text
-  for l:pair in l:substitutions
-    let l:text = substitute(l:text, l:pair[0], l:pair[1], 'g')
-  endfor
-  return l:text
-endfunction
-
-highlight GreenText ctermfg=Green guifg=Green
-highlight RedText ctermfg=Red guifg=Red
-highlight YellowText ctermfg=Yellow guifg=Yellow
-  
-highlight TitleText ctermfg=Blue guifg=Blue ctermbg=NONE guibg=NONE
-highlight CourseText ctermfg=DarkGreen guifg=DarkGreen ctermbg=NONE guibg=NONE
-function! s:create_window()
-  vertical botrigh 90new                            " create a new window on the right that's 60 columns wide
-
-  setlocal nomodifiable                             " stop the user from editing the buffer
-  setlocal buftype=nofile bufhidden=wipe noswapfile " tell Vim this is a temporary buffer not backed by a file
-  setlocal nonumber cursorline wrap nospell         " no line numbers, wrapping, highlight the current line
-
-  call s:highlightTitleChecks()
-
-  file Jutge Problems                                     " set the file name of the buffer
-endfunction
-
-function! s:highlightTitleChecks()
-  call matchadd('GreenText', s:CORRECT_EXERCISE_CHECK)
-  call matchadd('RedText', s:INCORRECT_EXERCISE_CHECK)
-  call matchadd('YellowText', s:PARTIAL_EXERCISE_CHECK)
-
-  call matchaddpos('TitleText',[1])
-endfunction
-
-function! s:set_init_text(disp_text)
-  setlocal modifiable
-
-  let lines = split(a:disp_text, '\n')
-
-  call append(0, lines)
-  
-  setlocal nomodifiable
-endfunction
-
-function! s:add_mappings()
-  nmap <silent> <buffer> q :bd<CR>
-  nmap <silent> <buffer> <Enter> :call <SID>handle_enter()<CR>
-endfunction
-
 function! s:handle_enter_list_courses()
   setlocal modifiable
-  let line_enter = line('.')
-  let column_enter = col('.')
+  let l:line_enter = line('.')
+  let l:column_enter = col('.')
 
   silent! normal! gg"_dG
 
-  let res = s:update_courses_vis(line_enter)
-  if(res == -1)
-    let disp_text = ui#make_course_text()
+  let l:res = s:update_courses_vis(l:line_enter)
+  if(l:res == -1)
+    let l:disp_text = ui#make_course_text()
 
-    let lines = split(disp_text, '\n')
-    call append(0, lines)
+    let l:lines = split(l:disp_text, '\n')
+    call append(0, l:lines)
 
-    call cursor(line_enter, column_enter)
+    call cursor(l:line_enter, l:column_enter)
   else
-    call ui#show_problem(res)
+    call ui#show_problem(l:res)
   endif
 
   setlocal nomodifiable
-
 endfunction
 
 function! s:handle_enter()
@@ -426,7 +259,7 @@ endfunction
 
 function! ui#fetch_exercise_mk_text(id)
   let s:current_problem_id = a:id
-  let obj = ui#fetch_html_with_cookie("https://jutge.org/problems/".a:id."/")
+  let obj = http#fetch_html_with_cookie("https://jutge.org/problems/".a:id."/")
 
   let body = obj["child"][1]["child"][17]
   let content = body["child"][3]["child"][1]
@@ -445,7 +278,7 @@ function! ui#fetch_exercise_mk_text(id)
   catch
     " Some content is located in a different structure in the HTML, probably
     " some legacy stuff
-    try 
+   try 
       let problem_description = content["child"][9]["child"][3]["child"][3]["child"][3]["child"][5]["child"][1]["child"][3] 
       let text = text . s:html_dom2text(problem_description)
     catch
@@ -462,14 +295,14 @@ let s:t_dict = 4
 
 
 function! s:html_dom2text(obj)
-  return s:html_dom2text_aux("html",a:obj)
+  return s:html_dom2text_aux("html",a:obj,0)
 endfunction
 
 let s:last_element_tag = ""
 let s:first_in_div = 0
 let s:first_paragraph = 0
 
-function! s:html_dom2text_aux(father_tag, obj)
+function! s:html_dom2text_aux(father_tag, obj,inside_pre)
   if(type(a:obj) == s:t_string) 
     if(trim(a:obj) == "")
       return "" " This prevents the display of line breaks of blocs (not content) in the html file
@@ -479,7 +312,7 @@ function! s:html_dom2text_aux(father_tag, obj)
         let s:last_element_tag = ""
       endif
       
-      if(a:father_tag != "pre" && a:father_tag != "div:lstlisting")
+      if(!a:inside_pre && a:father_tag != "div:lstlisting")
         return s:remove_linebreaks(a:obj)
       else
         return a:obj
@@ -501,7 +334,8 @@ function! s:html_dom2text_aux(father_tag, obj)
     let tag_type = "div:lstlisting"
     let s:first_in_div = 1
   endif
-
+  
+  let l:inside_pre = a:inside_pre
   let ret_str = ""
   if(tag_type == "li")
     let ret_str = "\n\t\t * "
@@ -509,8 +343,8 @@ function! s:html_dom2text_aux(father_tag, obj)
     let ret_str = "\n"
   elseif(tag_type == "pre")
     let ret_str = "--------------------------------\n"
+    let l:inside_pre = 1
   endif
-  
 
   while i < n
     let el = children[i]
@@ -528,7 +362,7 @@ function! s:html_dom2text_aux(father_tag, obj)
 
       let s:last_element_tag = tag_type
     endif
-    let text_append = s:html_dom2text_aux(tag_type, el)
+    let text_append = s:html_dom2text_aux(tag_type, el,l:inside_pre)
     
     if(s:get_last_char(ret_str) == '\n' && s:get_first_char(ret_str) == "\n")
       let ret_str = s:remove_last_char(ret_str)
@@ -601,4 +435,17 @@ endfunction
 
 function! s:handle_enter_show_exercise()
   echo "Enter"
+endfunction
+
+function! ui#go_back_to_courses()
+  setlocal modifiable
+  silent! normal! gg"_dG
+  
+  let s:mode = 0
+  let s:courses = http#fetch_problems()
+  
+  let l:disp_text = ui#make_course_text()
+  let l:lines = split(l:disp_text, '\n')
+  call append(0, l:lines)
+  setlocal nomodifiable
 endfunction
