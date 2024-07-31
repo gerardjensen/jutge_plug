@@ -99,7 +99,7 @@ function! ui#make_course_text()
     let index += 1
   endwhile
 
-  call ClearHighlights()
+  call s:clear_highlights()
 
   for line in s:course_lines
     call add(s:match_ids, matchaddpos('CourseText', [[line]]))
@@ -110,7 +110,7 @@ function! ui#make_course_text()
   return disp_text
 endfunction
 
-function! ClearHighlights()
+function! s:clear_highlights()
   for id in s:match_ids
     call matchdelete(id)
   endfor
@@ -418,10 +418,10 @@ function! ui#show_problem(id)
   let s:mode = 1
   let disp_text = ui#fetch_exercise_mk_text(a:id)
 
-  call ClearHighlights()
-
+  call s:clear_highlights()
   let lines = split(disp_text, '\n')
   call append(0, lines)
+  call cursor(1,0)
 endfunction
 
 function! ui#fetch_exercise_mk_text(id)
@@ -439,115 +439,161 @@ function! ui#fetch_exercise_mk_text(id)
   let problem_status = trim(problem_status)
   let text = text.problem_status."\n\n"
 
-  let problem_description = content["child"][9]["child"][3]["child"][3]["child"][3]["child"][3]["child"][3]["child"]
-  " let tar_file_url = problem_description["child"][1]["child"][5]["attr"]["href"]
-  " let tar_file_url = "https://jutge.org".trim(tar_file_url)
+  try 
+    let problem_description = content["child"][9]["child"][3]["child"][3]["child"][3]["child"][3]["child"][3]
+    let text = text . s:html_dom2text(problem_description)
+  catch
+    " Some content is located in a different structure in the HTML, probably
+    " some legacy stuff
+    try 
+      let problem_description = content["child"][9]["child"][3]["child"][3]["child"][3]["child"][5]["child"][1]["child"][3] 
+      let text = text . s:html_dom2text(problem_description)
+    catch
+      let text = text . "There was a problem viewing this exercise (probably the UI changed). Please read from the pdf"
+    endtry
+  endtry
   
-  let element_index = 1
-
-  let n = len(problem_description)
-
-  while element_index < n
-    let desc = problem_description[element_index]
-    let element_index = element_index + 1
-    if(type(desc) != 4 ||  !has_key(desc, "name"))
-      continue
-    endif
-
-    if(desc["name"] == "p" || desc["name"] == "div") 
-      let paragraph = desc["child"]
-      let m = len(paragraph)
-      let p_el = 0
-      let p_sentence = ""
-      while p_el < m
-        let el = paragraph[p_el]
-        let p_el = p_el + 1
-        let sentence = ""
-        if(type(el) == 1) 
-          let sentence = trim(el) 
-        elseif(type(el) == 4 && (el["name"] == "span" || el["name"] == "em" || el["name"] == "code") && len(el["child"]) == 1)
-          let sentence = " " . trim(el["child"][0]) . " "
-        if(el["name"] == "em" && desc["name"] == "div")
-          let sentence = "\n" . sentence
-        endif
-        elseif(type(el) == 4 && el["name"] == "br")
-          let sentence = "\n"
-        else
-          let sentence = " [UNKNOWN WORD] "
-        endif
-        let p_sentence = p_sentence .  sentence
-      endwhile
-
-      let text = text . p_sentence . "\n\n"
-    elseif(desc["name"] == "pre" && len(desc["child"]) == 1)
-      let code = ""
-      if(type(desc["child"][0]) == 1)
-        let code = trim(desc["child"][0])
-      elseif (type(desc["child"][0]) == 4 && len(desc["child"][0]["child"]) == 1 && desc["child"][0]["name"] == "span")
-        let code = trim(desc["child"][0]["child"][0])
-      else
-        let code = "[UNKNOWN CODE]"
-      endif 
-
-      let text = text . "-----------------------\n"
-      let text = text . code
-      let text = text . "\n-----------------------\n\n"
-    elseif(desc["name"] == "ul")
-      let bullet_points = desc["child"]
-      
-      let k = len(bullet_points)
-      let p_li = 0
-      while p_li < k
-        let li = bullet_points[p_li]
-        let p_li = p_li + 1
-        
-        if(type(li) != 4 ||  !has_key(li, "name"))
-          continue
-        endif
-
-        if(li["name"] != "li")
-          text = text . "\t\ŧ * [UNKNOWN ELEMENT]"  
-        else  
-         " TODO: merge function with p/div 
-         
-
-      let paragraph = li["child"]
-      let m = len(paragraph)
-      let p_el = 0
-      let p_sentence = ""
-      while p_el < m
-        let el = paragraph[p_el]
-        let p_el = p_el + 1
-        let sentence = ""
-        if(type(el) == 1) 
-          let sentence = trim(el) 
-        elseif(type(el) == 4 && (el["name"] == "span" || el["name"] == "em" || el["name"] == "code") && len(el["child"]) == 1)
-          let sentence = " " . trim(el["child"][0]) . " "
-        if(el["name"] == "em" && desc["name"] == "div")
-          let sentence = "\n" . sentence
-        endif
-        elseif(type(el) == 4 && el["name"] == "br")
-          let sentence = "\n"
-        else
-          let sentence = " [UNKNOWN WORD] "
-        endif
-        let p_sentence = p_sentence .  sentence
-      endwhile
-
-      let text = text . "\t\t * " . p_sentence . "\n\n" 
-        endif
-      endwhile
-    else 
-      let text = text . "[UNKNOWN ELEMENT: ".desc["name"]."]\n\n"
-    endif
-
-  endwhile
-
-
   return text
 endfunction
 
 let s:current_problem_id = ""
+let s:t_string = 1
+let s:t_dict = 4
+
+
+function! s:html_dom2text(obj)
+  return s:html_dom2text_aux("html",a:obj)
+endfunction
+
+let s:last_element_tag = ""
+let s:first_in_div = 0
+let s:first_paragraph = 0
+
+function! s:html_dom2text_aux(father_tag, obj)
+  if(type(a:obj) == s:t_string) 
+    if(trim(a:obj) == "")
+      return "" " This prevents the display of line breaks of blocs (not content) in the html file
+                " because the webapi still detects those
+    else
+      if(a:father_tag == "div:lstlisting")
+        let s:last_element_tag = ""
+      endif
+      
+      if(a:father_tag != "pre" && a:father_tag != "div:lstlisting")
+        return s:remove_linebreaks(a:obj)
+      else
+        return a:obj
+      endif
+    endif
+  endif
+
+  if(type(a:obj) != s:t_dict || !has_key(a:obj, "child")|| !has_key(a:obj, "name")) 
+    return "[INVALID TEXT]"
+  endif
+
+  let children = a:obj["child"]
+  let i = 0
+  let n = len(children)
+
+  let tag_type = tolower(trim(a:obj["name"]))
+
+  if(tag_type == "div" && s:is_of_class(a:obj,"lstlisting"))
+    let tag_type = "div:lstlisting"
+    let s:first_in_div = 1
+  endif
+
+  let ret_str = ""
+  if(tag_type == "li")
+    let ret_str = "\n\t\t * "
+  elseif(tag_type == "br" || tag_type == "p" && a:father_tag == "li")
+    let ret_str = "\n"
+  elseif(tag_type == "pre")
+    let ret_str = "--------------------------------\n"
+  endif
+  
+
+  while i < n
+    let el = children[i]
+    let i = i + 1
+
+    if(a:father_tag == "div:lstlisting" && tag_type == "em")
+      let ret_str = ret_str . "\n"
+    endif
+    
+    if(a:father_tag == "div:lstlisting")
+      if(tag_type == "span" && (s:last_element_tag == tag_type || s:first_in_div)) " TODO: em's can also have a space before in some conditions
+        let ret_str = ret_str . " "
+        let s:first_in_div = 0
+      endif
+
+      let s:last_element_tag = tag_type
+    endif
+    let text_append = s:html_dom2text_aux(tag_type, el)
+    
+    if(s:get_last_char(ret_str) == '\n' && s:get_first_char(ret_str) == "\n")
+      let ret_str = s:remove_last_char(ret_str)
+    endif
+    let ret_str = ret_str . text_append
+  endwhile
+
+  if(tag_type == "p" || tag_type == "ul" || tag_type == "div:lstlisting" || tag_type == "table")
+    let ret_str = ret_str . "\n\n"
+  elseif(tag_type == "sub")
+    let ret_str = "_{" . ret_str . "}"
+  elseif(tag_type == "pre")
+    let ret_str = ret_str. "\n--------------------------------\n\n"
+  endif  
+  return ret_str
+endfunction
+
+function! s:remove_linebreaks(str)
+    " Replace all line breaks (\n and \r\n) with nothing
+    let l:result = substitute(a:str, '\n', ' ', 'g')
+    let l:result = substitute(l:result, '\r', ' ', 'g')
+    
+    return l:result
+endfunction
+
+function! s:remove_last_char(str)
+    " Get the length of the string
+    let l:len = len(a:str)
+    
+    " Use strcharpart to get the string without the last character
+    let l:result = strpart(a:str, 0, l:len - 1)
+    
+    return l:result
+endfunction
+
+function! s:get_first_char(str)
+    " If the string is empty, return an empty string
+    if len(a:str) == 0
+        return ''
+    endif
+    
+    " Use strcharpart to get the first character
+    let l:first_char = strcharpart(a:str, 0, 1)
+    
+    return l:first_char
+endfunction
+
+function! s:get_last_char(str)
+  " Get the length of the string
+  let l:len = len(a:str)
+
+  " If the string is empty, return an empty string
+  if l:len == 0
+    return ''
+  endif
+
+  " Use strcharpart to get the last character
+  let l:last_char = strcharpart(a:str, l:len - 1, 1)
+
+  return l:last_char
+endfunction
+
+function! s:is_of_class(obj, class)
+  return has_key(a:obj,"attr") && has_key(a:obj["attr"],"class") && a:obj["attr"]["class"] == a:class
+endfunction
 
 function! ui#get_exercise_files()
   call http#fetch_exercise_files(s:current_problem_id)
