@@ -65,7 +65,13 @@ function! http#init()
   endif
 endfunction
 
-function! http#get_exercice(...)
-  let exercice = a:1
-  let command = 
+function! http#fetch_exercise_files(id)
+  " TODO: check for failed get
+  
+  call s:system("curl -s https://jutge.org/problems/".a:id."/zip -b ".s:cookie_file." --output problem.zip")
+  call s:system("unzip problem.zip && rm problem.zip")
+  
+  call s:system("curl -s https://jutge.org/problems/".a:id."/public.tar -b ".s:cookie_file." --output ".a:id."/public_files.tar")
+  call s:system("tar xf ".a:id."/public_files.tar -C ".a:id."/")
+  call s:system("rm ".a:id."/public_files.tar")
 endfunction

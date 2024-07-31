@@ -16,5 +16,6 @@ command! -nargs=* JutgeSetCredentials call jutge_plug#JutgeSetCredentials(<f-arg
 command! -nargs=0 JutgeCheckCookieValidity call http#print_valid_cookie()
 command! -nargs=0 JutgeShowProblems call ui#JutgeShowProblems()
 
+command! -nargs=0 JutgeGetExerciseFiles call ui#get_exercise_files()
 
 call http#init()

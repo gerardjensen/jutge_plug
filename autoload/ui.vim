@@ -176,8 +176,9 @@ function! ui#get_course(content)
           let exercice_status = s:PARTIAL_EXERCISE_CHECK
         endif
       endif
-      let exercice_id = exercice_content[3]["child"][0]
+      let exercice_id = exercice_content[3]["attr"]["href"]
       let exercice_id = trim(exercice_id)
+      let exercice_id = s:get_last_element_url(exercice_id)
       let exercice_name = exercice_content[4]
       let exercice_name = substitute(exercice_name,"&nbsp;","","")
       let exercice_name = trim(exercice_name)
@@ -198,6 +199,19 @@ function! ui#get_course(content)
   let course["lessons"][lesson_index] = lesson
 
   return course
+endfunction
+
+function! s:get_last_element_url(url)
+    " Remove the trailing slash if it exists
+    let l:url = substitute(a:url, '/\+$', '', '')
+
+    " Find the position of the last slash
+    let l:last_slash_pos = strridx(l:url, '/')
+
+    " Get the last element by slicing the string from the last slash
+    let l:last_element = strpart(l:url, l:last_slash_pos + 1)
+
+    return l:last_element
 endfunction
 
 function! ui#replace_accents(text)
@@ -243,7 +257,7 @@ highlight YellowText ctermfg=Yellow guifg=Yellow
 highlight TitleText ctermfg=Blue guifg=Blue ctermbg=NONE guibg=NONE
 highlight CourseText ctermfg=DarkGreen guifg=DarkGreen ctermbg=NONE guibg=NONE
 function! s:create_window()
-  vertical botrigh 60new                            " create a new window on the right that's 60 columns wide
+  vertical botrigh 90new                            " create a new window on the right that's 60 columns wide
 
   setlocal nomodifiable                             " stop the user from editing the buffer
   setlocal buftype=nofile bufhidden=wipe noswapfile " tell Vim this is a temporary buffer not backed by a file
@@ -402,11 +416,141 @@ endfunction
 
 function! ui#show_problem(id)
   let s:mode = 1
-  let id = a:id
+  let disp_text = ui#fetch_exercise_mk_text(a:id)
 
-  echo "Fetching problem: ".id
+  call ClearHighlights()
 
-  let res = ui#fetch_html_with_cookie("https://jutge.org/problems/".id."/")
+  let lines = split(disp_text, '\n')
+  call append(0, lines)
+endfunction
+
+function! ui#fetch_exercise_mk_text(id)
+  let s:current_problem_id = a:id
+  let obj = ui#fetch_html_with_cookie("https://jutge.org/problems/".a:id."/")
+
+  let body = obj["child"][1]["child"][17]
+  let content = body["child"][3]["child"][1]
+  let title = content["child"][5]["child"][1]["child"][2]
+  let title = trim(title)
+
+  let text = "> ".title."\n\n"
+  
+  let problem_status = content["child"][9]["child"][1]["child"][1]["child"][1]["child"][1]["child"][0]
+  let problem_status = trim(problem_status)
+  let text = text.problem_status."\n\n"
+
+  let problem_description = content["child"][9]["child"][3]["child"][3]["child"][3]["child"][3]["child"][3]["child"]
+  " let tar_file_url = problem_description["child"][1]["child"][5]["attr"]["href"]
+  " let tar_file_url = "https://jutge.org".trim(tar_file_url)
+  
+  let element_index = 1
+
+  let n = len(problem_description)
+
+  while element_index < n
+    let desc = problem_description[element_index]
+    let element_index = element_index + 1
+    if(type(desc) != 4 ||  !has_key(desc, "name"))
+      continue
+    endif
+
+    if(desc["name"] == "p" || desc["name"] == "div") 
+      let paragraph = desc["child"]
+      let m = len(paragraph)
+      let p_el = 0
+      let p_sentence = ""
+      while p_el < m
+        let el = paragraph[p_el]
+        let p_el = p_el + 1
+        let sentence = ""
+        if(type(el) == 1) 
+          let sentence = trim(el) 
+        elseif(type(el) == 4 && (el["name"] == "span" || el["name"] == "em" || el["name"] == "code") && len(el["child"]) == 1)
+          let sentence = " " . trim(el["child"][0]) . " "
+        if(el["name"] == "em" && desc["name"] == "div")
+          let sentence = "\n" . sentence
+        endif
+        elseif(type(el) == 4 && el["name"] == "br")
+          let sentence = "\n"
+        else
+          let sentence = " [UNKNOWN WORD] "
+        endif
+        let p_sentence = p_sentence .  sentence
+      endwhile
+
+      let text = text . p_sentence . "\n\n"
+    elseif(desc["name"] == "pre" && len(desc["child"]) == 1)
+      let code = ""
+      if(type(desc["child"][0]) == 1)
+        let code = trim(desc["child"][0])
+      elseif (type(desc["child"][0]) == 4 && len(desc["child"][0]["child"]) == 1 && desc["child"][0]["name"] == "span")
+        let code = trim(desc["child"][0]["child"][0])
+      else
+        let code = "[UNKNOWN CODE]"
+      endif 
+
+      let text = text . "-----------------------\n"
+      let text = text . code
+      let text = text . "\n-----------------------\n\n"
+    elseif(desc["name"] == "ul")
+      let bullet_points = desc["child"]
+      
+      let k = len(bullet_points)
+      let p_li = 0
+      while p_li < k
+        let li = bullet_points[p_li]
+        let p_li = p_li + 1
+        
+        if(type(li) != 4 ||  !has_key(li, "name"))
+          continue
+        endif
+
+        if(li["name"] != "li")
+          text = text . "\t\ŧ * [UNKNOWN ELEMENT]"  
+        else  
+         " TODO: merge function with p/div 
+         
+
+      let paragraph = li["child"]
+      let m = len(paragraph)
+      let p_el = 0
+      let p_sentence = ""
+      while p_el < m
+        let el = paragraph[p_el]
+        let p_el = p_el + 1
+        let sentence = ""
+        if(type(el) == 1) 
+          let sentence = trim(el) 
+        elseif(type(el) == 4 && (el["name"] == "span" || el["name"] == "em" || el["name"] == "code") && len(el["child"]) == 1)
+          let sentence = " " . trim(el["child"][0]) . " "
+        if(el["name"] == "em" && desc["name"] == "div")
+          let sentence = "\n" . sentence
+        endif
+        elseif(type(el) == 4 && el["name"] == "br")
+          let sentence = "\n"
+        else
+          let sentence = " [UNKNOWN WORD] "
+        endif
+        let p_sentence = p_sentence .  sentence
+      endwhile
+
+      let text = text . "\t\t * " . p_sentence . "\n\n" 
+        endif
+      endwhile
+    else 
+      let text = text . "[UNKNOWN ELEMENT: ".desc["name"]."]\n\n"
+    endif
+
+  endwhile
+
+
+  return text
+endfunction
+
+let s:current_problem_id = ""
+
+function! ui#get_exercise_files()
+  call http#fetch_exercise_files(s:current_problem_id)
 endfunction
 
 function! s:handle_enter_show_exercise()
