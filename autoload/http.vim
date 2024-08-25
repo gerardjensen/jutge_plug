@@ -3,54 +3,54 @@ let s:cookie_file = s:plugindir."/cookies.txt"
 let s:credentials_file = s:plugindir."/credentials.txt"
 
 let s:system = function(get(g:, 'webapi#system_function', 'system'))
+let s:submission_result_max_fetch_attempts = 5
 
 function! http#get_cookie(...)
-  let email = a:1
-  let password = a:2
-  let command = "curl -s --data \"email=".email."&password=".password."&submit=\" https://jutge.org/ -c ".s:cookie_file
-  let res = s:system(command)
-  if(len(res) == 0)
-    echo "Cookie updated successfully"
+  let l:email = a:1
+  let l:password = a:2
+  let l:command = "curl -s --data \"email=".email."&password=".password."&submit=\" https://jutge.org/ -c ".s:cookie_file
+  let l:res = s:system(l:command)
+  if(len(l:res) == 0)
+    echo "Jutge cookie updated successfully"
   else
-    echo "Error signing in"
+    echo "Error signing in to jutge.org"
   endif
 endfunction
 
-function! http#check_valid_coockie()
+function! http#check_valid_cookie()
   if(!filereadable(s:cookie_file))
     return 0
   endif
 
-  let command = "curl -s https://jutge.org/ -b ".s:cookie_file 
-  let res = s:system(command)
-  let res_s = split(res,"\n")
-  let title_line = res_s[11]
+  let l:command = "curl -s https://jutge.org/ -b ".s:cookie_file 
+  let l:res = s:system(l:command)
+  let l:res_s = split(l:res,"\n")
+  let l:title_line = res_s[11]
     
-  let status = title_line[23:-9]
+  let l:status = title_line[23:-9]
   
-  return status == "Dashboard"
+  return l:status == "Dashboard"
 endfunction
 
 function! http#print_valid_cookie()
-  let is_valid = http#check_valid_coockie()
-  if(is_valid)
+  let l:is_valid = http#check_valid_cookie()
+  if(l:is_valid)
     echo "Cookie is valid"
   else
     echo "Cookie is not valid!!!"
   endif
 endfunction
 
- " TODO: check server connection before anything else
+ " TODO: check server connection before anything else if connection involved
 function! http#server_available()
-  let command = "curl -s https://jutge.org/" 
-  let res = s:system(command)
-  return res != ""
+  let l:res = s:system("curl -s https://jutge.org/")
+  return l:res != ""
 endfunction
 
 function! http#init()
   if(!http#server_available()) 
     echo "Unable to connect to Jutge"
-    return
+    return -1
   endif
 
   if(!filereadable(s:credentials_file)) 
@@ -58,20 +58,20 @@ function! http#init()
     return
   endif
 
-  let valid_cookie = http#check_valid_coockie()
-  if(!valid_cookie)
+  let l:valid_cookie = http#check_valid_cookie()
+  if(!l:valid_cookie)
     echo "Cookie too old, updating it"
-    let content = readfile(s:credentials_file)
-    let email = content[0]
-    let password = content[1]
-    call http#get_cookie(email,password)
+    let l:content = readfile(s:credentials_file)
+    let l:email = content[0]
+    let l:password = content[1]
+    call http#get_cookie(l:email,l:password)
   else 
     echo "Cookie is already valid"
   endif
 endfunction
 
 function! http#fetch_exercise_files(id)
-  " TODO: check for failed get
+  " TODO: check if all commands actually did something
   
   call s:system("curl -s https://jutge.org/problems/".a:id."/zip -b ".s:cookie_file." --output problem.zip")
   call s:system("unzip problem.zip")
@@ -82,129 +82,147 @@ function! http#fetch_exercise_files(id)
   call s:system("rm ".a:id."/public_files.tar")
 endfunction
 
+function! http#send_submission(id, submission_path, compiler_name) 
+  echo "Uploading to ".a:id." the file ".a:submission_path
+  let l:submission_url = s:system("node ".s:plugindir."/js/send.js ".a:id." ".s:cookie_file." ".a:submission_path." ".a:compiler_name)
+  let l:submission_url = trim(l:submission_url)
+
+
+  let l:i = 0 
+  let l:verdict = "Unknown"
+
+  while (l:i < s:submission_result_max_fetch_attempts)
+    try 
+      let l:res_page = http#fetch_html_with_cookie(l:submission_url) 
+      let l:verdict = l:res_page["child"][1]["child"][17]["child"][3]["child"][1]["child"][9]["child"][1]["child"][1]["child"][1]["child"][3]["child"][1]["child"][1]["child"][3]["child"][1]["child"][1]["child"][3]["child"][1]["child"][0]
+      let l:verdict = trim(l:verdict)
+      break
+    catch
+      sleep 200m " No idea why, but busy waiting solves the issue
+    endtry
+    let l:i = l:i + 1
+  endwhile
+
+    echo "Verdict: " . l:verdict
+endfunction
+
 function! http#fetch_html_with_cookie(url)
-  let command = "curl -s ".a:url." -b ".s:cookie_file 
-  let res = s:system(command)
-  return webapi#html#parse(res) 
+  let l:command = "curl -s ".a:url." -b ".s:cookie_file 
+  let l:res = s:system(l:command)
+  return webapi#html#parse(l:res) 
 endfunction
 
 function! http#fetch_problems()
-  let obj = http#fetch_html_with_cookie("https://jutge.org/problems")
-  let body = obj["child"][1]["child"][17]
-  let raw_content = body["child"][3]["child"][1]["child"][9]["child"]
-  let courses_len = (len(raw_content)-1)/2
-  let courses = map(range(courses_len), 0)
-  let raw_index = 1
-  let index = 0
-  while(index < courses_len)
-    let content = raw_content[raw_index] 
-    let courses[index] = http#get_course(content)
-    let index+=1
-    let raw_index+=2
+  let l:obj = http#fetch_html_with_cookie("https://jutge.org/problems")
+  let l:body = obj["child"][1]["child"][17]
+  let l:raw_content = body["child"][3]["child"][1]["child"][9]["child"]
+  let l:courses_len = (len(l:raw_content)-1)/2
+  let l:courses = map(range(l:courses_len), 0)
+  let l:raw_index = 1
+  let l:index = 0
+  while(l:index < l:courses_len)
+    let l:content = raw_content[l:raw_index] 
+    let l:courses[l:index] = http#get_course(l:content)
+    let l:index+=1
+    let l:raw_index+=2
   endwhile
-  return courses
+  return l:courses
 endfunction
 
 function! http#get_course(content)
-  let course = {}
-  let course_name = a:content["child"][1]["child"][1]["child"][0]
-  let course_name = trim(course_name)
-  let course_name = http#replace_accents(course_name)
-  let course["name"] = course_name
-  let course["lessons_visible"] = 0
-  let course["lessons"] = {}
+  let l:course = {}
+  let l:course_name = a:content["child"][1]["child"][1]["child"][0]
+  let l:course_name = trim(l:course_name)
+  let l:course_name = http#replace_accents(l:course_name)
+  let l:course["name"] = l:course_name
+  let l:course["lessons_visible"] = 0
+  let l:course["lessons"] = {}
 
-  let raw_lessons_exercices = a:content["child"][3]["child"]
+  let l:raw_lessons_exercices = a:content["child"][3]["child"]
 
-  let raw_lessons_exercices_len = len(raw_lessons_exercices)
-  let raw_index = 1
-  let lesson_index = -1
-  let exercice_index = 0
-  let lesson = {}
-  let exercices = {}
-  while(raw_index < raw_lessons_exercices_len)
-    let row_cnt = raw_lessons_exercices[raw_index]
-    let title_box = row_cnt["child"][1]["child"][1]
+  let l:raw_lessons_exercices_len = len(l:raw_lessons_exercices)
+  let l:raw_index = 1
+  let l:lesson_index = -1
+  let l:exercice_index = 0
+  let l:lesson = {}
+  let l:exercices = {}
+  while (l:raw_index < l:raw_lessons_exercices_len)
+    let l:row_cnt = l:raw_lessons_exercices[l:raw_index]
+    let l:title_box = l:row_cnt["child"][1]["child"][1]
 
-    if(title_box["name"] == "b") " is lesson
-      if(lesson_index > -1)
-        let lesson["exercices"] = exercices
-        let course["lessons"][lesson_index] = lesson
+    if (l:title_box["name"] == "b") " is lesson
+      if (l:lesson_index > -1)
+        let l:lesson["exercices"] = l:exercices
+        let l:course["lessons"][l:lesson_index] = l:lesson
       endif
-      let lesson_index += 1
+      let l:lesson_index += 1
 
-      let lesson = {}
-      let lesson_name = title_box["child"][1]["child"][0]
-      let lesson_name = trim(lesson_name)
-      let lesson_name = http#replace_accents(lesson_name)
-      let lesson["name"] = lesson_name
+      let l:lesson = {}
+      let l:lesson_name = l:title_box["child"][1]["child"][0]
+      let l:lesson_name = trim(l:lesson_name)
+      let l:lesson_name = http#replace_accents(l:lesson_name)
+      let l:lesson["name"] = l:lesson_name
 
-      let lesson["exercices"] = {}
-      let lesson["exercices_visible"] = 0
+      let l:lesson["exercices"] = {}
+      let l:lesson["exercices_visible"] = 0
 
-      let exercice_index = 0
-      let exercices = {}
-    elseif(title_box["name"] == "i") " is exercice
-      let exercice_content = row_cnt["child"][1]["child"]
-      let has_content = len(exercice_content) > 4
-      if(!has_content)
-        let raw_index += 2
+      let l:exercice_index = 0
+      let l:exercices = {}
+    elseif (l:title_box["name"] == "i") " is exercice
+      let l:exercice_content = l:row_cnt["child"][1]["child"]
+      let l:has_content = len(l:exercice_content) > 4
+      if (!l:has_content)
+        let l:raw_index += 2
         continue
       endif
-      let status_box = exercice_content[1]
-      let exercice_status = " "
-      if(has_key(status_box,"attr") && has_key(status_box["attr"],"style"))
-        let status_box_style = status_box["attr"]["style"]
+      let l:status_box = l:exercice_content[1]
+      let l:exercice_status = " "
+      if (has_key(l:status_box, "attr") && has_key(l:status_box["attr"], "style"))
+        let l:status_box_style = l:status_box["attr"]["style"]
 
-        if(stridx(status_box_style,"green") != -1)
-          let exercice_status = g:CORRECT_EXERCISE_CHECK
-        elseif (stridx(status_box_style,"red") != -1)
-          let exercice_status = g:INCORRECT_EXERCISE_CHECK
+        if (stridx(l:status_box_style, "green") != -1)
+          let l:exercice_status = g:CORRECT_EXERCISE_CHECK
+        elseif (stridx(l:status_box_style, "red") != -1)
+          let l:exercice_status = g:INCORRECT_EXERCISE_CHECK
         else
-          let exercice_status = g:PARTIAL_EXERCISE_CHECK
+          let l:exercice_status = g:PARTIAL_EXERCISE_CHECK
         endif
       endif
-      let exercice_id = exercice_content[3]["attr"]["href"]
-      let exercice_id = trim(exercice_id)
-      let exercice_id = s:get_last_element_url(exercice_id)
-      let exercice_name = exercice_content[4]
-      let exercice_name = substitute(exercice_name,"&nbsp;","","")
-      let exercice_name = trim(exercice_name)
-      let exercice_name = http#replace_accents(exercice_name)
+      let l:exercice_id = l:exercice_content[3]["attr"]["href"]
+      let l:exercice_id = trim(l:exercice_id)
+      let l:exercice_id = s:get_last_element_url(l:exercice_id)
+      let l:exercice_name = l:exercice_content[4]
+      let l:exercice_name = substitute(l:exercice_name, "&nbsp;", "", "")
+      let l:exercice_name = trim(l:exercice_name)
+      let l:exercice_name = http#replace_accents(l:exercice_name)
 
-      let exercice = {}
-      let exercice["name"] = exercice_name
-      let exercice["id"] = exercice_id
-      let exercice["status"] = exercice_status
-      let exercices[exercice_index] = exercice
-      let exercice_index += 1
+      let l:exercice = {}
+      let l:exercice["name"] = l:exercice_name
+      let l:exercice["id"] = l:exercice_id
+      let l:exercice["status"] = l:exercice_status
+      let l:exercices[l:exercice_index] = l:exercice
+      let l:exercice_index += 1
     endif
 
-    let raw_index += 2
+    let l:raw_index += 2
   endwhile
 
-  let lesson["exercices"] = exercices
-  let course["lessons"][lesson_index] = lesson
+  let l:lesson["exercices"] = l:exercices
+  let l:course["lessons"][l:lesson_index] = l:lesson
 
-  return course
+  return l:course
 endfunction
 
 function! s:get_last_element_url(url)
-    " Remove the trailing slash if it exists
-    let l:url = substitute(a:url, '/\+$', '', '')
-
-    " Find the position of the last slash
-    let l:last_slash_pos = strridx(l:url, '/')
-
-    " Get the last element by slicing the string from the last slash
-    let l:last_element = strpart(l:url, l:last_slash_pos + 1)
-
+    let l:url = substitute(a:url, '/\+$', '', '') " Remove the trailing slash if it exists
+    let l:last_slash_pos = strridx(l:url, '/') " Find the position of the last slash
+    let l:last_element = strpart(l:url, l:last_slash_pos + 1) " Get the last element by slicing the string from the last slash
     return l:last_element
 endfunction
 
 function! http#replace_accents(text)
   " These are some of the HTML special characters
-  " Only parsing the Catalan and Spanish Language ones at the moment
+  " Only parsing the Catalan, Spanish and English Language ones at the moment
 
   let l:substitutions = [
         \ ['&aacute;', 'á'],

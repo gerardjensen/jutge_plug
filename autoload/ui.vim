@@ -50,7 +50,7 @@ function! s:create_window()
 
   call s:highlight_statics()
 
-  file Jutge Problems                                     " set the file name of the buffer
+  file Jutge Problems                               " set the file name of the buffer
 endfunction
 
 function! s:highlight_statics()
@@ -150,68 +150,66 @@ endfunction
 function! s:handle_enter()
   if(s:mode == 0)
     call s:handle_enter_list_courses()
-  elseif(s:mode == 1)
-    call s:handle_enter_show_exercise()
   endif
 endfunction
 
 function! s:update_courses_vis(line)
-  let c_line = 5
-  if(a:line < c_line)
+  let l:c_line = 5
+  if (a:line < l:c_line)
     return -1
   endif
-  let course_index = 0
-  let lesson_index = -1
-  let exercice_index = -1
+  let l:course_index = 0
+  let l:lesson_index = -1
+  let l:exercice_index = -1
 
-  let courses_len = len(s:courses)
+  let l:courses_len = len(s:courses)
 
-  while(c_line < a:line)
-    let course = s:courses[course_index]
-    let course_vis_lines = ui#get_course_vis_lines(course)
+  while (l:c_line < a:line)
+    let l:course = s:courses[l:course_index]
+    let l:course_vis_lines = ui#get_course_vis_lines(l:course)
 
-    if(a:line > c_line + course_vis_lines)
-      let c_line += course_vis_lines + 1
-      let course_index += 1
+    if (a:line > l:c_line + l:course_vis_lines)
+      let l:c_line += l:course_vis_lines + 1
+      let l:course_index += 1
 
-      if(course_index >= courses_len)
+      if (l:course_index >= l:courses_len)
         return -1
       endif 
     else
-      if(lesson_index + 1 >= len(course["lessons"]))
+      if (l:lesson_index + 1 >= len(l:course["lessons"]))
         return -1
       endif
-      let lesson = course["lessons"][lesson_index+1] 
-      let lesson_vis_lines = ui#get_lesson_vis_lines(lesson)
+      let l:lesson = l:course["lessons"][l:lesson_index+1]
+      let l:lesson_vis_lines = ui#get_lesson_vis_lines(l:lesson)
 
-      if(c_line + lesson_vis_lines < a:line)
-        let c_line += lesson_vis_lines
-        let lesson_index += 1
+      if (l:c_line + l:lesson_vis_lines < a:line)
+        let l:c_line += l:lesson_vis_lines
+        let l:lesson_index += 1
 
-        if(lesson_index >= len(course["lessons"]))
+        if (l:lesson_index >= len(l:course["lessons"]))
           return -1
         endif
       else
-        if(c_line + 1 == a:line)
-          let lesson_index += 1 
+        if (l:c_line + 1 == a:line)
+          let l:lesson_index += 1
           break
         endif
-        let lesson_index += 1
+        let l:lesson_index += 1
 
-        let exercice_index += a:line - c_line -1
+        let l:exercice_index += a:line - l:c_line - 1
         break
       endif
     endif
   endwhile
 
-  if(lesson_index == -1)
-    let s:courses[course_index]["lessons_visible"] = !s:courses[course_index]["lessons_visible"]
-  elseif(exercice_index == -1)
-    if (s:courses[course_index]["lessons_visible"] && lesson_index < len(s:courses[course_index]["lessons"]))
-      let s:courses[course_index]["lessons"][lesson_index]["exercices_visible"] = !s:courses[course_index]["lessons"][lesson_index]["exercices_visible"]
+  if (l:lesson_index == -1)
+    let s:courses[l:course_index]["lessons_visible"] = !s:courses[l:course_index]["lessons_visible"]
+  elseif (l:exercice_index == -1)
+    if (s:courses[l:course_index]["lessons_visible"] && l:lesson_index < len(s:courses[l:course_index]["lessons"]))
+      let s:courses[l:course_index]["lessons"][l:lesson_index]["exercices_visible"] = !s:courses[l:course_index]["lessons"][l:lesson_index]["exercices_visible"]
     endif
   else
-    return s:courses[course_index]["lessons"][lesson_index]["exercices"][exercice_index]["id"]
+    return s:courses[l:course_index]["lessons"][l:lesson_index]["exercices"][l:exercice_index]["id"]
   endif
 
   return -1
@@ -222,19 +220,19 @@ function! ui#get_course_vis_lines(course)
     return 1
   endif
 
-  let lessons = a:course["lessons"]
-  let lessons_line_sum = 0
-  let lessons_cnt = len(lessons)
+  let l:lessons = a:course["lessons"]
+  let l:lessons_line_sum = 0
+  let l:lessons_cnt = len(l:lessons)
 
-  let lindex = 0
-  while(lindex < lessons_cnt)
-    let lesson = lessons[lindex]
-    let lessons_line_sum += ui#get_lesson_vis_lines(lesson)
+  let l:lindex = 0
+  while(l:lindex < l:lessons_cnt)
+    let l:lesson = l:lessons[l:lindex]
+    let l:lessons_line_sum += ui#get_lesson_vis_lines(l:lesson)
 
-    let lindex+=1
+    let l:lindex+=1
   endwhile
 
-  return 1 + lessons_line_sum
+  return 1 + l:lessons_line_sum
 endfunction
 
 function! ui#get_lesson_vis_lines(lesson)
@@ -242,57 +240,56 @@ function! ui#get_lesson_vis_lines(lesson)
     return 1
   endif
 
-  let exercices = a:lesson["exercices"]
-  let exercices_cnt = len(exercices) 
-  return 1 + exercices_cnt
+  let l:exercices = a:lesson["exercices"]
+  let l:exercices_cnt = len(l:exercices) 
+  return 1 + l:exercices_cnt
 endfunction
 
 function! ui#show_problem(id)
   let s:mode = 1
-  let disp_text = ui#fetch_exercise_mk_text(a:id)
+  let l:disp_text = ui#fetch_exercise_mk_text(a:id)
 
   call s:clear_highlights()
-  let lines = split(disp_text, '\n')
-  call append(0, lines)
+  let l:lines = split(l:disp_text, '\n')
+  call append(0, l:lines)
   call cursor(1,0)
 endfunction
 
 function! ui#fetch_exercise_mk_text(id)
   let s:current_problem_id = a:id
-  let obj = http#fetch_html_with_cookie("https://jutge.org/problems/".a:id."/")
+  let l:obj = http#fetch_html_with_cookie("https://jutge.org/problems/".a:id."/")
 
-  let body = obj["child"][1]["child"][17]
-  let content = body["child"][3]["child"][1]
-  let title = content["child"][5]["child"][1]["child"][2]
-  let title = trim(title)
+  let l:body = l:obj["child"][1]["child"][17]
+  let l:content = l:body["child"][3]["child"][1]
+  let l:title = l:content["child"][5]["child"][1]["child"][2]
+  let l:title = trim(l:title)
 
-  let text = "> ".title."\n\n"
+  let l:text = "> ".l:title."\n\n"
   
-  let problem_status = content["child"][9]["child"][1]["child"][1]["child"][1]["child"][1]["child"][0]
-  let problem_status = trim(problem_status)
-  let text = text.problem_status."\n\n"
+  let l:problem_status = l:content["child"][9]["child"][1]["child"][1]["child"][1]["child"][1]["child"][0]
+  let l:problem_status = trim(l:problem_status)
+  let l:text = l:text . l:problem_status."\n\n"
 
   try 
-    let problem_description = content["child"][9]["child"][3]["child"][3]["child"][3]["child"][3]["child"][3]
-    let text = text . s:html_dom2text(problem_description)
+    let l:problem_description = l:content["child"][9]["child"][3]["child"][3]["child"][3]["child"][3]["child"][3]
+    let l:text = l:text . s:html_dom2text(l:problem_description)
   catch
     " Some content is located in a different structure in the HTML, probably
     " some legacy stuff
    try 
-      let problem_description = content["child"][9]["child"][3]["child"][3]["child"][3]["child"][5]["child"][1]["child"][3] 
-      let text = text . s:html_dom2text(problem_description)
+      let l:problem_description = content["child"][9]["child"][3]["child"][3]["child"][3]["child"][5]["child"][1]["child"][3] 
+      let l:text = l:text . s:html_dom2text(l:problem_description)
     catch
-      let text = text . "There was a problem viewing this exercise (probably the UI changed). Please read from the pdf"
+      let l:text = l:text . "There was a problem viewing this exercise (probably the UI changed). Please read from the pdf"
     endtry
   endtry
   
-  return text
+  return l:text
 endfunction
 
 let s:current_problem_id = ""
 let s:t_string = 1
 let s:t_dict = 4
-
 
 function! s:html_dom2text(obj)
   return s:html_dom2text_aux("html",a:obj,0)
@@ -324,104 +321,89 @@ function! s:html_dom2text_aux(father_tag, obj,inside_pre)
     return "[INVALID TEXT]"
   endif
 
-  let children = a:obj["child"]
-  let i = 0
-  let n = len(children)
+  let l:children = a:obj["child"]
 
-  let tag_type = tolower(trim(a:obj["name"]))
+  let l:tag_type = tolower(trim(a:obj["name"]))
 
-  if(tag_type == "div" && s:is_of_class(a:obj,"lstlisting"))
-    let tag_type = "div:lstlisting"
+  if(l:tag_type == "div" && s:is_of_class(a:obj,"lstlisting"))
+    let l:tag_type = "div:lstlisting"
     let s:first_in_div = 1
   endif
   
   let l:inside_pre = a:inside_pre
-  let ret_str = ""
-  if(tag_type == "li")
-    let ret_str = "\n\t\t * "
-  elseif(tag_type == "br" || tag_type == "p" && a:father_tag == "li")
-    let ret_str = "\n"
-  elseif(tag_type == "pre")
-    let ret_str = "--------------------------------\n"
+  let l:ret_str = ""
+  if(l:tag_type == "li")
+    let l:ret_str = "\n\t\t * "
+  elseif(l:tag_type == "br" || l:tag_type == "p" && a:father_tag == "li")
+    let l:ret_str = "\n"
+  elseif(l:tag_type == "pre")
+    let l:ret_str = "--------------------------------\n"
     let l:inside_pre = 1
   endif
 
-  while i < n
-    let el = children[i]
-    let i = i + 1
+  let l:i = 0
+  let l:n = len(l:children)
+  
+  while l:i < l:n
+    let l:el = l:children[l:i]
+    let l:i = l:i + 1
 
-    if(a:father_tag == "div:lstlisting" && tag_type == "em")
-      let ret_str = ret_str . "\n"
+    if(a:father_tag == "div:lstlisting" && l:tag_type == "em")
+      let l:ret_str = l:ret_str . "\n"
     endif
     
     if(a:father_tag == "div:lstlisting")
-      if(tag_type == "span" && (s:last_element_tag == tag_type || s:first_in_div)) " TODO: em's can also have a space before in some conditions
-        let ret_str = ret_str . " "
+      if(l:tag_type == "span" && (s:last_element_tag == l:tag_type || s:first_in_div)) " TODO: em's can also have a space before in some conditions
+        let l:ret_str = l:ret_str . " "
         let s:first_in_div = 0
       endif
 
-      let s:last_element_tag = tag_type
+      let s:last_element_tag = l:tag_type
     endif
-    let text_append = s:html_dom2text_aux(tag_type, el,l:inside_pre)
+    let l:text_append = s:html_dom2text_aux(l:tag_type, l:el,l:inside_pre)
     
-    if(s:get_last_char(ret_str) == '\n' && s:get_first_char(ret_str) == "\n")
-      let ret_str = s:remove_last_char(ret_str)
+    if(s:get_last_char(l:ret_str) == '\n' && s:get_first_char(l:ret_str) == "\n")
+      let l:ret_str = s:remove_last_char(l:ret_str)
     endif
-    let ret_str = ret_str . text_append
+    let l:ret_str = l:ret_str . l:text_append
   endwhile
 
-  if(tag_type == "p" || tag_type == "ul" || tag_type == "div:lstlisting" || tag_type == "table")
-    let ret_str = ret_str . "\n\n"
-  elseif(tag_type == "sub")
-    let ret_str = "_{" . ret_str . "}"
-  elseif(tag_type == "pre")
-    let ret_str = ret_str. "\n--------------------------------\n\n"
+  if(l:tag_type == "p" || l:tag_type == "ul" || l:tag_type == "div:lstlisting" || l:tag_type == "table")
+    let l:ret_str = l:ret_str . "\n\n"
+  elseif(l:tag_type == "sub")
+    let l:ret_str = "_{" . l:ret_str . "}"
+  elseif(l:tag_type == "pre")
+    let l:ret_str = l:ret_str. "\n--------------------------------\n\n"
   endif  
-  return ret_str
+  return l:ret_str
 endfunction
 
 function! s:remove_linebreaks(str)
-    " Replace all line breaks (\n and \r\n) with nothing
     let l:result = substitute(a:str, '\n', ' ', 'g')
     let l:result = substitute(l:result, '\r', ' ', 'g')
-    
     return l:result
 endfunction
 
 function! s:remove_last_char(str)
-    " Get the length of the string
-    let l:len = len(a:str)
-    
-    " Use strcharpart to get the string without the last character
+    let l:len = len(a:str) 
     let l:result = strpart(a:str, 0, l:len - 1)
-    
     return l:result
 endfunction
 
 function! s:get_first_char(str)
-    " If the string is empty, return an empty string
     if len(a:str) == 0
         return ''
     endif
-    
-    " Use strcharpart to get the first character
     let l:first_char = strcharpart(a:str, 0, 1)
-    
     return l:first_char
 endfunction
 
 function! s:get_last_char(str)
-  " Get the length of the string
   let l:len = len(a:str)
-
-  " If the string is empty, return an empty string
   if l:len == 0
     return ''
   endif
-
-  " Use strcharpart to get the last character
   let l:last_char = strcharpart(a:str, l:len - 1, 1)
-
   return l:last_char
 endfunction
 
@@ -430,11 +412,46 @@ function! s:is_of_class(obj, class)
 endfunction
 
 function! ui#get_exercise_files()
+  if(s:mode != 1) 
+    call "No exercise selected"
+    return -1
+  endif
   call http#fetch_exercise_files(s:current_problem_id)
 endfunction
 
-function! s:handle_enter_show_exercise()
-  echo "Enter"
+function! ui#upload_submission(...)
+  let l:size = a:0
+  if(l:size != 2) 
+    echo "JutgePlug: Invalid usage of JutgeUpload. Correct is JutgeUpload <file> <compiler>"
+    return -1
+  endif
+
+  if(s:mode != 1) 
+    echo "No exercise selected"
+    return -1
+  endif
+
+  let l:filepath = ui#expand_relative_path(a:1)
+  let l:compiler = a:2 " TODO: Check for invalid compiler (requires updating or making a new JS script)
+
+  if(!filereadable(l:filepath))
+    echo "Invalid path: ".l:filepath
+    return -1
+  endif
+
+  call http#send_submission(s:current_problem_id,l:filepath, l:compiler)
+endfunction
+
+function! ui#expand_relative_path(file_path)
+  if a:file_path =~ '^/'
+      let l:expanded_path = a:file_path
+  else
+      let l:current_dir = expand('%:p:h')
+      let l:expanded_path = l:current_dir . '/' . a:file_path
+  endif
+  let l:normalized_path = fnamemodify(l:expanded_path, ':p')
+
+  return l:normalized_path
 endfunction
 
 function! ui#go_back_to_courses()
