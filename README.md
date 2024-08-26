@@ -5,7 +5,7 @@ A plugin to interface with jutge.org within Vim.
 If you use [vim-plug](https://github.com/junegunn/vim-plug) :
 
 ```vim
-Plug 'https://github.com/gerardjensen/jutge_plug'
+Plug 'gerardjensen/jutge_plug'
 ```
 
 in your `.vimrc` or `init.vim` and run `:PlugInstall`.
