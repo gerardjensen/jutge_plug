@@ -8,7 +8,7 @@ let s:submission_result_max_fetch_attempts = 5
 function! http#get_cookie(...)
   let l:email = a:1
   let l:password = a:2
-  let l:command = "curl -s --data \"email=".email."&password=".password."&submit=\" https://jutge.org/ -c ".s:cookie_file
+  let l:command = "curl -s --connect-timeout 5 --data \"email=".email."&password=".password."&submit=\" https://jutge.org/ -c ".s:cookie_file
   let l:res = s:system(l:command)
   if(len(l:res) == 0)
     echo "Jutge cookie updated successfully"
@@ -22,7 +22,7 @@ function! http#check_valid_cookie()
     return 0
   endif
 
-  let l:command = "curl -s https://jutge.org/ -b ".s:cookie_file 
+  let l:command = "curl -s --connect-timeout 5 https://jutge.org/ -b ".s:cookie_file 
   let l:res = s:system(l:command)
   let l:res_s = split(l:res,"\n")
   let l:title_line = res_s[11]
@@ -43,14 +43,14 @@ endfunction
 
  " TODO: check server connection before anything else if connection involved
 function! http#server_available()
-  let l:res = s:system("curl -s https://jutge.org/")
+  let l:res = s:system("curl -s --connect-timeout 5 https://jutge.org/")
   return l:res != ""
 endfunction
 
 function! http#init()
   if(!http#server_available()) 
     echo "Unable to connect to Jutge"
-    return -1
+    return
   endif
 
   if(!filereadable(s:credentials_file)) 
@@ -73,11 +73,11 @@ endfunction
 function! http#fetch_exercise_files(id)
   " TODO: check if all commands actually did something
   
-  call s:system("curl -s https://jutge.org/problems/".a:id."/zip -b ".s:cookie_file." --output problem.zip")
+  call s:system("curl -s --connect-timeout 5 https://jutge.org/problems/".a:id."/zip -b ".s:cookie_file." --output problem.zip")
   call s:system("unzip problem.zip")
   call s:system("rm problem.zip")
   
-  call s:system("curl -s https://jutge.org/problems/".a:id."/public.tar -b ".s:cookie_file." --output ".a:id."/public_files.tar")
+  call s:system("curl -s --connect-timeout 5 https://jutge.org/problems/".a:id."/public.tar -b ".s:cookie_file." --output ".a:id."/public_files.tar")
   call s:system("tar xf ".a:id."/public_files.tar -C ".a:id."/")
   call s:system("rm ".a:id."/public_files.tar")
 endfunction
@@ -107,7 +107,7 @@ function! http#send_submission(id, submission_path, compiler_name)
 endfunction
 
 function! http#fetch_html_with_cookie(url)
-  let l:command = "curl -s ".a:url." -b ".s:cookie_file 
+  let l:command = "curl --connect-timeout 5 -s ".a:url." -b ".s:cookie_file 
   let l:res = s:system(l:command)
   return webapi#html#parse(l:res) 
 endfunction
