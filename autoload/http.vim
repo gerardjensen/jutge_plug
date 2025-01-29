@@ -114,14 +114,27 @@ endfunction
 
 function! http#fetch_problems()
   let l:obj = http#fetch_html_with_cookie("https://jutge.org/problems")
-  let l:body = obj["child"][1]["child"][17]
-  let l:raw_content = body["child"][3]["child"][1]["child"][9]["child"]
+  let l:body = l:obj["child"][3]
+  
+  try
+    let l:body = l:obj["child"][1]["child"][17] " On old jutge ui, body tag was here
+    let l:raw_content = l:body["child"][3]["child"][1]["child"][9]["child"]
+  catch
+    try
+      let l:body = l:obj["child"][3]
+      let l:raw_content = l:body["child"][3]["child"][1]["child"][9]["child"]
+    catch
+      echo "The page structure changed and the scrapping can not correctly be done"
+      return
+    endtry
+  endtry
+  
   let l:courses_len = (len(l:raw_content)-1)/2
   let l:courses = map(range(l:courses_len), 0)
   let l:raw_index = 1
   let l:index = 0
   while(l:index < l:courses_len)
-    let l:content = raw_content[l:raw_index] 
+    let l:content = l:raw_content[l:raw_index] 
     let l:courses[l:index] = http#get_course(l:content)
     let l:index+=1
     let l:raw_index+=2
