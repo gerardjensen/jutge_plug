@@ -21,14 +21,23 @@ JutgePlug depends on the following programs under the hood:
   * `node` with `puppeteer` and its `chrome` browser (only used to upload the submission, if you won't do that then it is not necessary)
 
 ## Usage
-There are 6 vim commands to use
+There are 7 vim commands to use
+
+### Initialising the plugin
+
+Every time one wants to use the plugin, and connect to the Jutge server, one must call
+    
+    :JutgeInit
+
+This is analogous to logging in to the Jutge website. To log in, one must have set the correct user credentials, specified next.
 
 ### Setting the credentials
 To be able to log in, use the command `JutgeSetCredentials` as follows
 
     :JutgeSetCredentials <email> <password>
 
-Note, that your password is stored in a txt file in the plugin folder. Please keep in mind it is not encrypted since the plugin has to send it as is to the jutge server to log in. I am not responsible for any potential password leak.
+> [!CAUTION]
+Note that your password is stored in a txt file in the plugin folder. Please keep in mind it is not encrypted since the plugin has to send it as is to the jutge server to log in. I am not responsible for any potential password leak.
 
 ### Checking the cookie status
 You can use `:JutgeCheckCookieValidity` to see if the current cookie is valid and if not, it tries to renew it. The cookie is automatically updated when initialising vim so you should never need to use this command.

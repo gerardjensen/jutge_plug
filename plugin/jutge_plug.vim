@@ -20,4 +20,4 @@ command! -nargs=0 JutgeGetExerciseFiles call ui#get_exercise_files()
 command! -nargs=* JutgeUpload call ui#upload_submission(<f-args>)
 command! -nargs=1 JutgeTest call jutge_plug#test_submission(<f-args>)
 
-call http#init()
+command! -nargs=0 JutgeInit call http#init()
